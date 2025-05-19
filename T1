@@ -1,0 +1,127 @@
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+
+headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
+ARXIV_FIELDS = {
+    # maths
+    "math": 955,
+    # statistics
+    "stat": 229,
+    # Computer Science
+    "cs": 2248,
+    # Electrical Engineering and Systems Science
+    "eess": 352,
+    # Astrophysics
+    "astro-ph": 376,
+    # High Energy Physics - Experiment
+    "hep-ex": 69,
+    # Quantum Physics
+    "quant-ph": 266,
+    # Quantitative Biology
+    "q-bio": 76
+}
+
+ARXIV_BASE_URL = "https://arxiv.org/list/"
+ARXIV_ABS_URL = "https://arxiv.org/abs/"    
+
+def generate_arxiv_pages(fields):
+    pages = {}
+
+    for category, total_articles in fields.items():
+        # Generating URLs based on the category and total number of articles
+        category_pages = []
+        for skip in range(0, total_articles, 25):
+            page = f"{ARXIV_BASE_URL}{category}/pastweek?skip={skip}&show=25"
+            category_pages.append(page)
+
+        pages[category] = category_pages
+
+    return pages
+
+def extract_ids(html_content):
+    # Parse HTML content with BeautifulSoup
+    soup = BeautifulSoup(html_content, 'html.parser')
+
+    # Find all dl tags containing dt tags
+    dl_tags = soup.find_all('dl')
+
+    # List to store extracted IDs
+    extracted_ids = []
+
+    # Iterate through dl tags
+    for dl_tag in dl_tags:
+        # Find all dt tags within the current dl tag
+        dt_tags = dl_tag.find_all('dt')
+
+        # Iterate through dt tags
+        for dt_tag in dt_tags:
+            # Find the span tag within the dt tag
+            span_tag = dt_tag.find('span')
+
+            # Find the a tag within the span tag
+            a_tag = span_tag.find('a')
+
+            # Check if the a tag has a title containing "Abstract"
+            if a_tag and a_tag.get('title', '').lower() == 'abstract':
+                # Extract the 'href' attribute, which contains the ID
+                href_attr = a_tag.get('href')
+
+                # Extract the ID from the 'href' attribute
+                id_value = href_attr.split('/')[-1]
+
+                # Append the ID to the list
+                extracted_ids.append(id_value)
+
+    return extracted_ids
+
+def scrape_articles_ids(page_url):
+    try:
+        # Send an HTTP GET request to the URL
+        response = requests.get(page_url, headers=headers)
+
+        # Check if the request was successful (status code 200)
+        if response.status_code == 200:
+            # Extract Ids
+            return extract_ids(response.content)
+        else:
+            print(f"Failed to retrieve HTML content. Status code: {response.status_code}")
+            return None
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return None
+    
+
+def get_articles_ids(pages_urls):
+    articles_ids = {}
+    for category, category_pages in pages_urls.items():
+        ids = []
+        for page_url in category_pages:
+            print(f"Scraping {page_url}")
+            result = scrape_articles_ids(page_url)
+            if result:
+                ids += result
+        articles_ids[category] = ids
+        print(f"{len(ids)} IDs for {category}")
+    return articles_ids
+
+
+arxiv_pages = generate_arxiv_pages(ARXIV_FIELDS)
+
+total_pages = 0
+for category, category_pages in arxiv_pages.items():
+    print(category_pages)
+    print(f"{category}:")
+    length = len(category_pages)
+    print(length)
+    total_pages += length
+print("total pages: ", total_pages)
+
+
+articles_ids = get_articles_ids(arxiv_pages)
+total_ids = 0
+for _, ids in articles_ids.items():
+  total_ids += len(ids)
+
+print(f"total number of articles: {total_ids}")
