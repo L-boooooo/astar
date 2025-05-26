@@ -1,0 +1,89 @@
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
+
+ARXIV_FIELDS = {
+    # maths
+    "math": 100,
+    # statistics
+    "stat": 100,
+    # Computer Science
+    "cs": 100,
+    # Electrical Engineering and Systems Science
+    "eess": 100,
+    # Astrophysics
+    "astro-ph": 100,
+    # High Energy Physics - Experiment
+    "hep-ex": 100,
+    # Quantum Physics
+    "quant-ph": 100,
+    # Quantitative Biology
+    "q-bio": 100
+}
+
+ARXIV_BASE_URL = "https://arxiv.org/list/"
+ARXIV_ABS_URL = "https://arxiv.org"
+
+
+def generate_arxiv_pages(fields):
+    pages = {}
+
+    for category, total_articles in fields.items():
+        # Generating URLs based on the category and total number of articles
+        category_pages = []
+        for skip in range(0, total_articles, 25):
+            page = f"{ARXIV_BASE_URL}{category}/pastweek?skip={skip}&show=25"
+            category_pages.append(page)
+
+        pages[category] = category_pages
+
+    return pages
+
+
+def get_articles_ids(pages_urls):
+    articles_ids = {}
+    for category, pages_urls in arxiv_pages.items():
+
+        ids = []
+        for page_url in pages_urls:
+            print(f"Scraping {page_url}")
+            ids += scrape_articles_ids(page_url)
+
+        articles_ids[category] = ids
+        print(f"{len(ids)} IDs for {category}")
+
+    return articles_ids
+
+
+arxiv_pages = generate_arxiv_pages(ARXIV_FIELDS)
+
+articles_by_field = {}
+for field, pages in arxiv_pages.items():
+    print(f"{field}: {len(pages)} pages")
+    all_articles = []
+    for page in pages:
+        # print(page)
+        content = requests.get(page, headers=headers).content
+        soup = BeautifulSoup(content, 'html.parser')
+        articles = soup.find_all('div', class_='list-title mathjax')
+        authors = soup.find_all('div', class_='list-authors')
+        abs_urls = soup.find_all('a', href=True, attrs={"title": "Abstract"})
+        # print(abs_url)
+        assert len(articles) == len(authors), "Number of articles and authors do not match"
+        for i in range(len(articles)):
+            article = articles[i].get_text(strip=True)
+            author = authors[i].get_text(strip=True)
+            abs_url = ARXIV_ABS_URL + abs_urls[i]['href']
+            abs_content = requests.get(abs_url, headers=headers).content
+            abs_soup = BeautifulSoup(abs_content, 'html.parser')
+            abs = abs_soup.find('blockquote', class_='abstract mathjax').get_text(strip=True)
+            # abs = abs_soup.get_text(strip=True)
+            # print()
+
+            all_articles.append((article, author))
+            print(f"\nArticle: {article}\n", f"Author: {author}")
+            print(f"{abs}")
+    articles_by_field[field] = all_articles
